@@ -40,7 +40,8 @@ export default function BlogDetail() {
       {/* Back Button */}
       <Link
         to="/"
-        className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors mb-6"
+       className="inline-flex items-center text-black hover:text-gray-700 transition-colors mb-6"
+
       >
         ← Back to posts
       </Link>

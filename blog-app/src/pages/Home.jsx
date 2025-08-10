@@ -1,9 +1,13 @@
-
 import { useEffect, useState } from "react";
+import Header from "@/components/Header";
 import BlogModal from "../components/BlogModal";
-import { Button } from "@/components/ui/button";
 import BlogCard from "../components/BlogCard";
-import axios from "axios";
+import Pagination from "../components/Pagination";
+import SignInModal from "../components/SignInModal";
+import SignUpModal from "../components/SignUpModal";
+import { Button } from "@/components/ui/button";
+import { fetchAllBlogs, fetchMyBlogs, createBlog, deleteBlog } from "../services/blogService";
+import { signUp, signIn } from "../services/authService";
 
 export default function Home() {
   const [blogs, setBlogs] = useState([]);
@@ -19,258 +23,159 @@ export default function Home() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Pagination states
   const [browsePage, setBrowsePage] = useState(1);
   const [browseTotalPages, setBrowseTotalPages] = useState(1);
 
   const [myPage, setMyPage] = useState(1);
   const [myTotalPages, setMyTotalPages] = useState(1);
 
-  // ✅ Fetch all blogs for Browse tab
-  const fetchAllBlogs = async (page = 1) => {
-    try {
-      const { data } = await axios.get(`http://localhost:8000/blogs?page=${page}&page_size=3`);
-      setBlogs(data.items);
-      setBrowseTotalPages(data.total_pages);
-      setBrowsePage(data.current_page);
-    } catch (err) {
-      console.error(err.response?.data || err.message);
-    }
+  const loadAllBlogs = async (page = 1) => {
+    const { data } = await fetchAllBlogs(page);
+    setBlogs(data.items);
+    setBrowseTotalPages(data.total_pages);
+    setBrowsePage(data.current_page);
   };
 
-  // ✅ Fetch user's blogs for My Blogs tab
-  const fetchMyBlogs = async (page = 1) => {
-    try {
-      const token = localStorage.getItem("access_token");
-      if (!token) return;
-
-      const { data } = await axios.get(`http://localhost:8000/blogs/me?page=${page}&page_size=3`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMyBlogs(data.items);
-      setMyTotalPages(data.total_pages);
-      setMyPage(data.current_page);
-    } catch (err) {
-      console.error(err.response?.data || err.message);
-    }
+  const loadMyBlogs = async (page = 1) => {
+    const { data } = await fetchMyBlogs(page);
+    setMyBlogs(data.items);
+    setMyTotalPages(data.total_pages);
+    setMyPage(data.current_page);
   };
 
-  // ✅ Delete blog
-  const handleDeleteBlog = async (blogId) => {
-    try {
-      const token = localStorage.getItem("access_token");
-      await axios.delete(`http://localhost:8000/blogs/${blogId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      fetchMyBlogs(myPage); // reload same page after delete
-    } catch (err) {
-      console.error(err.response?.data || err.message);
-    }
-  };
-
-  useEffect(() => {
-    fetchAllBlogs();
-    const token = localStorage.getItem("access_token");
-    if (token) setIsLoggedIn(true);
-  }, []);
-
-  // ✅ Create Blog handler
   const handleCreateBlog = async (blog) => {
-    try {
-      const token = localStorage.getItem("access_token");
-      await axios.post("http://localhost:8000/blogs/", blog, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      fetchMyBlogs(1); // refresh my blogs list
-      setIsModalOpen(false);
-    } catch (err) {
-      console.error(err.response?.data || err.message);
-    }
+    await createBlog(blog);
+    loadMyBlogs(1);
+    setIsModalOpen(false);
   };
 
-  // ✅ Sign Up Handlers
-  const handleSignUpChange = (e) => setSignUpData({ ...signUpData, [e.target.name]: e.target.value });
+  const handleDeleteBlog = async (id) => {
+    await deleteBlog(id);
+    loadMyBlogs(myPage);
+  };
 
   const handleSignUpSubmit = async (e) => {
     e.preventDefault();
-    try {
-      await axios.post("http://localhost:8000/auth/signup", signUpData);
-      setShowSignUp(false);
-      alert("Sign up successful! Please sign in.");
-    } catch (err) {
-      console.error(err.response?.data || err.message);
-    }
+    await signUp(signUpData);
+    setShowSignUp(false);
+    alert("Sign up successful! Please sign in.");
   };
-
-  // ✅ Sign In Handlers
-  const handleSignInChange = (e) => setSignInData({ ...signInData, [e.target.name]: e.target.value });
 
   const handleSignInSubmit = async (e) => {
     e.preventDefault();
-    try {
-      const form = new FormData();
-      form.append("username", signInData.username);
-      form.append("password", signInData.password);
-
-      const { data } = await axios.post("http://localhost:8000/auth/token", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      localStorage.setItem("access_token", data.access_token);
-      setIsLoggedIn(true);
-      setShowSignIn(false);
-      fetchMyBlogs();
-    } catch (err) {
-      console.error(err.response?.data || err.message);
-    }
+    const { data } = await signIn(signInData.username, signInData.password);
+    localStorage.setItem("access_token", data.access_token);
+    setIsLoggedIn(true);
+    setShowSignIn(false);
+    loadMyBlogs();
   };
 
-  // Pagination Button Component
-  const Pagination = ({ currentPage, totalPages, onPageChange }) => {
-    return (
-      <div className="flex justify-center gap-2 mt-6">
-        <Button variant="outline" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Prev</Button>
-        {[...Array(totalPages)].map((_, i) => (
-          <Button
-            key={i}
-            variant={currentPage === i + 1 ? "default" : "outline"}
-            onClick={() => onPageChange(i + 1)}
-          >
-            {i + 1}
-          </Button>
-        ))}
-        <Button variant="outline" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</Button>
-      </div>
-    );
-  };
+  useEffect(() => {
+    loadAllBlogs();
+    if (localStorage.getItem("access_token")) setIsLoggedIn(true);
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto p-4">
-      {/* Header */}
-      <header className="flex items-center justify-between mb-4 border-b pb-4">
-        <div></div>
-        <h1 className="text-3xl font-bold text-center flex-1">B L O G S P H E R E</h1>
-        <div className="flex gap-2">
-          {isLoggedIn ? (
-            <Button variant="outline" onClick={() => { localStorage.removeItem("access_token"); setIsLoggedIn(false); setMyBlogs([]); }}>Logout</Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => setShowSignIn(true)}>Sign In</Button>
-              <Button variant="default" onClick={() => setShowSignUp(true)}>Sign Up</Button>
-            </>
-          )}
-        </div>
-      </header>
+    
+       <Header
+        isLoggedIn={isLoggedIn}
+        onLogout={() => { localStorage.removeItem("access_token"); setIsLoggedIn(false); }}
+        onSignIn={() => setShowSignIn(true)}
+        onSignUp={() => setShowSignUp(true)}
+      />
 
-      {/* Navigation */}
-      <nav className="flex justify-center gap-6 border-b pb-2 mb-6">
-        <button
-          className={`pb-2 ${activeTab === "browse" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500 hover:text-blue-500"}`}
-          onClick={() => { setActiveTab("browse"); fetchAllBlogs(browsePage); }}
-        >
-          Browse
-        </button>
-        <button
-          className={`pb-2 ${activeTab === "myBlogs" ? "border-b-2 border-blue-500 text-blue-500" : "text-gray-500 hover:text-blue-500"}`}
-          onClick={() => {
-            setActiveTab("myBlogs");
-            if (isLoggedIn) fetchMyBlogs(myPage);
-          }}
-        >
-          My Blogs
-        </button>
-      </nav>
+     <nav className="flex justify-center gap-6 border-b pb-2 mb-6">
+          <button
+            className={`pb-2 ${
+              activeTab === "browse"
+                ? "border-b-2 border-black text-black"
+                : "text-gray-500 hover:text-black"
+            }`}
+            onClick={() => {
+              setActiveTab("browse");
+              loadAllBlogs(browsePage);
+            }}
+          >
+            Browse
+          </button>
 
-      {/* Browse Tab */}
+          <button
+            className={`pb-2 ${
+              activeTab === "myBlogs"
+                ? "border-b-2 border-black text-black"
+                : "text-gray-500 hover:text-black"
+            }`}
+            onClick={() => {
+              setActiveTab("myBlogs");
+              if (isLoggedIn) loadMyBlogs(myPage);
+            }}
+          >
+            My Blogs
+          </button>
+        </nav>
+    
       {activeTab === "browse" && (
         <>
           <p className="text-sm text-gray-400 text-center mb-4">Showing {blogs.length} blogs</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {blogs.map((blog) => <BlogCard key={blog.id} blog={blog} />)}
-          </div>
-          <Pagination currentPage={browsePage} totalPages={browseTotalPages} onPageChange={fetchAllBlogs} />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{blogs.map((blog) => <BlogCard key={blog.id} blog={blog} />)}</div>
+          <Pagination currentPage={browsePage} totalPages={browseTotalPages} onPageChange={loadAllBlogs} />
         </>
       )}
 
-      {/* My Blogs Tab */}
       {activeTab === "myBlogs" && (
         isLoggedIn ? (
           <>
             <div className="text-center mb-6">
               <Button variant="ghost" onClick={() => setIsModalOpen(true)}>+ Create a blog</Button>
             </div>
-
             {myBlogs.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {myBlogs.map((blog) => (
                     <div key={blog.id} className="relative">
                       <BlogCard blog={blog} />
-                      <button
-                        onClick={() => handleDeleteBlog(blog.id)}
-                        className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 text-xs rounded"
-                      >
-                        Delete
-                      </button>
+                     
+<button
+  onClick={() => handleDeleteBlog(blog.id)}
+  className="-ml-px rounded-r-sm border border-red-300 px-3 py-2 text-red-600 transition-colors hover:bg-red-50 hover:text-red-800 focus:z-10 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-white focus:outline-none disabled:pointer-events-auto disabled:opacity-50"
+>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth="1.5"
+    stroke="currentColor"
+    className="size-5"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+    />
+  </svg>
+</button>
+
+
+
+
+
+
                     </div>
                   ))}
                 </div>
-                <Pagination currentPage={myPage} totalPages={myTotalPages} onPageChange={fetchMyBlogs} />
+                <Pagination currentPage={myPage} totalPages={myTotalPages} onPageChange={loadMyBlogs} />
               </>
-            ) : (
-              <p className="text-center text-gray-500 mt-10">You have no blogs yet.</p>
-            )}
+            ) : <p className="text-center text-gray-500 mt-10">You have no blogs yet.</p>}
           </>
-        ) : (
-          <p className="text-center text-gray-500 mt-10">Please sign in to view your blogs.</p>
-        )
+        ) : <p className="text-center text-gray-500 mt-10">Please sign in to view your blogs.</p>
       )}
 
-      {/* Blog Modal */}
-      <BlogModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onAdd={handleCreateBlog}
-      />
+      <BlogModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleCreateBlog} />
 
-      {/* Sign Up Modal */}
-      {showSignUp && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-96 relative">
-            <h2 className="text-2xl font-bold mb-4 text-center">Sign Up</h2>
-            <form onSubmit={handleSignUpSubmit} className="space-y-4">
-              <input type="text" name="username" placeholder="Username" value={signUpData.username} onChange={handleSignUpChange} className="w-full px-4 py-2 border rounded-lg" required />
-              <input type="email" name="email" placeholder="Email" value={signUpData.email} onChange={handleSignUpChange} className="w-full px-4 py-2 border rounded-lg" required />
-              <input type="password" name="password" placeholder="Password" value={signUpData.password} onChange={handleSignUpChange} className="w-full px-4 py-2 border rounded-lg" required />
-              <button type="submit" className="w-full bg-blue-500 text-white py-2 rounded-lg">Sign Up</button>
-            </form>
-            <p className="text-center text-sm mt-4">
-              Already have an account?{" "}
-              <button className="text-blue-500 hover:underline" onClick={() => { setShowSignUp(false); setShowSignIn(true); }}>Sign In</button>
-            </p>
-            <button onClick={() => setShowSignUp(false)} className="absolute top-3 right-3">✕</button>
-          </div>
-        </div>
-      )}
+      <SignInModal isOpen={showSignIn} onClose={() => setShowSignIn(false)} formData={signInData} onChange={(e) => setSignInData({ ...signInData, [e.target.name]: e.target.value })} onSubmit={handleSignInSubmit} switchToSignUp={() => { setShowSignIn(false); setShowSignUp(true); }} />
 
-      {/* Sign In Modal */}
-      {showSignIn && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-96 relative">
-            <h2 className="text-2xl font-bold mb-4 text-center">Sign In</h2>
-            <form onSubmit={handleSignInSubmit} className="space-y-4">
-              <input type="text" name="username" placeholder="Username" value={signInData.username} onChange={handleSignInChange} className="w-full px-4 py-2 border rounded-lg" required />
-              <input type="password" name="password" placeholder="Password" value={signInData.password} onChange={handleSignInChange} className="w-full px-4 py-2 border rounded-lg" required />
-              <button type="submit" className="w-full bg-blue-500 text-white py-2 rounded-lg">Sign In</button>
-            </form>
-            <p className="text-center text-sm mt-4">
-              Don't have an account?{" "}
-              <button className="text-blue-500 hover:underline" onClick={() => { setShowSignIn(false); setShowSignUp(true); }}>Sign Up</button>
-            </p>
-            <button onClick={() => setShowSignIn(false)} className="absolute top-3 right-3">✕</button>
-          </div>
-        </div>
-      )}
+      <SignUpModal isOpen={showSignUp} onClose={() => setShowSignUp(false)} formData={signUpData} onChange={(e) => setSignUpData({ ...signUpData, [e.target.name]: e.target.value })} onSubmit={handleSignUpSubmit} switchToSignIn={() => { setShowSignUp(false); setShowSignIn(true); }} />
     </div>
   );
 }
